@@ -22,21 +22,17 @@ class CompensationDataRepository():
         
         #Filter
         if len(query.filters) > 0:
-            print(len(query.filters))
             expr = CompensationDataRepository.buildFilterExpression(query.filters, self.mapping_object)
-            print(expr)
             if not(expr == "" or expr.isspace()):
                 data = data.query(expr)
 
         #Sorting
         if len(query.sort) > 0:
             sorting = CompensationDataRepository.buildSortFields(query.sort)
-            print(sorting)
             data = data.sort_values(by=sorting.field, ascending=sorting.ascending)
 
         #Select
         if len(query.fields) > 0:
-            print(query.fields)
             data = data.filter(items=query.fields)
 
         return data.to_json(orient="records", date_format="iso",
@@ -47,6 +43,8 @@ class CompensationDataRepository():
     def buildFilterExpression(filters: list[QueryFilter], mapping: CompansationHeadersMapping) -> str:
         result: list[str] = list[str]()
         for filter in filters:
+            if not(filter.field in mapping.mapping):
+                continue
             field_type = mapping.getType(filter.field)
             if field_type == "float64":
                 result.append(f'{filter.field} {CompensationDataRepository.getFilterOperation(filter.operation)} {filter.value}')

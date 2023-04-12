@@ -35,4 +35,6 @@ class CompansationHeadersMapping:
         return mapping
 
     def getType(self, key: str) -> str:
-        return self.mapping[key.lower()]['type']
+        if key in self.mapping:
+            return self.mapping[key.lower()]['type']
+        return ""
