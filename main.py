@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, Response
 from repositories import CompensationDataRepository
 from filters.query_builder import QueryBuilder
 
@@ -9,4 +9,4 @@ repo = CompensationDataRepository()
 def compensation_data():
     query = QueryBuilder().buildQuery(request.query_string)
     data = repo.readData(query)
-    return data
+    return Response(data, mimetype='application/json')
