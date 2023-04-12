@@ -1,68 +1,68 @@
+from collections import namedtuple
 import pandas as pd
 import os
-import io
 from models import CompansationHeadersMapping, QueryModel, QueryFilter, QuerySorting
 
 class CompensationDataRepository():	
+    mapping_object = CompansationHeadersMapping()
+
     def __init__(self):
         self.data = pd.read_csv(os.environ['DATA_PATH'], sep=",", parse_dates=True, dayfirst=False, date_format="%m/%d/%y %H:%M:%S")
-        map_obj = CompansationHeadersMapping()
-        mapping = CompansationHeadersMapping.getMapping(map_obj)
+        mapping = CompansationHeadersMapping.getMapping(self.mapping_object)
         self.data = self.data.rename(columns=mapping)
 
         #Fix timestamp parsing
-        for element in map_obj.mapping:
-            if element['type'] == "timestamp":
-                self.data[element['map']]= pd.to_datetime(self.data[element['map']])
+        for element in self.mapping_object.mapping:
+            element_mapping = self.mapping_object.mapping[element]
+            if element_mapping['type'] == "timestamp":
+                self.data[element]= pd.to_datetime(self.data[element])
     
     def readData(self, query: QueryModel):
-        data = self.data
-        map_obj = CompansationHeadersMapping()
-
+        data = self.data.copy(deep=True)
+        
         #Filter
         if len(query.filters) > 0:
-            expr = self.buildFilterExpression(query.filters, map_obj)
+            expr = CompensationDataRepository.buildFilterExpression(query.filters, self.mapping_object)
             if not(expr == "" or expr.isspace()):
                 data = data.query(expr)
 
         #Sorting
         if len(query.sort) > 0:
-            sorting = self.buildSortFields(query.sort)
-            data = data.sort_values(by=sorting[0], ascending=sorting[1])
+            sorting = CompensationDataRepository.buildSortFields(query.sort)
+            data = data.sort_values(by=sorting.field, ascending=sorting.ascending)
 
         #Select
         if len(query.fields) > 0:
             data = data.filter(items=query.fields)
 
-        with io.StringIO() as output:
-            data.to_json(output, 
-                        orient="records",
-                        lines=True, date_format="iso",
+        return data.to_json(orient="records", date_format="iso",
                         double_precision=10, force_ascii=True,
                         date_unit="ms", default_handler=None)
-            return output.getvalue()
 
-    def buildFilterExpression(self, filters: list[QueryFilter], mapping: CompansationHeadersMapping) -> str:
+    @staticmethod
+    def buildFilterExpression(filters: list[QueryFilter], mapping: CompansationHeadersMapping) -> str:
         result: list[str] = list[str]()
         for filter in filters:
-            if filter.operation == "like":
-                result.append(f'{filter.field}.str.contains("{filter.value}")')
+            if not(filter.field in mapping.mapping):
+                continue
+            field_type = mapping.getType(filter.field)
+            if field_type == "float64":
+                result.append(f'{filter.field} {CompensationDataRepository.getFilterOperation(filter.operation)} {filter.value}')
             else:
-                field_type = mapping.getType(filter.field)
-                if field_type == "float64":
-                    result.append(f'{filter.field} {self.getFilterOperation(filter.operation)} {filter.value}')
-                else:
-                    result.append(f'{filter.field} {self.getFilterOperation(filter.operation)} "{filter.value}"')
+                result.append(f'{filter.field} {CompensationDataRepository.getFilterOperation(filter.operation)} "{filter.value}"')
         return str.join(" and ", result)
 
-    def buildSortFields(self, sorts: list[QuerySorting]) -> tuple:
-        result = (list[str](), list[bool]())
+    @staticmethod
+    def buildSortFields(sorts: list[QuerySorting]) -> namedtuple:
+        Sorting = namedtuple('Sorting', ['field', 'ascending'])
+        result = Sorting(list[str](), list[bool]())
         for sort in sorts:
-            result[0].append(sort.field)
-            result[1].append(sort.ascending)
+            result.field.append(sort.field)
+            result.ascending.append(sort.ascending)
         return result
     
-    def getFilterOperation(self, op: str) -> str:
+    @staticmethod
+    def getFilterOperation(op: str) -> str:
         match op:
             case "gt":
                 return ">"
